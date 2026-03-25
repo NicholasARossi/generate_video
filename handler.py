@@ -228,6 +228,58 @@ def load_workflow(workflow_path):
     with open(absolute_path, 'r') as file:
         return json.load(file)
 
+
+def inject_loras(workflow, lora_pairs):
+    """Inject custom LoRA loader nodes into the ComfyUI workflow.
+
+    Chains LoraLoaderModelOnly nodes between the checkpoint (92:1) and the
+    model consumers (92:47 CFGGuider for first stage, 92:68 distilled LoRA
+    for second stage).
+
+    Args:
+        workflow: The ComfyUI workflow dict (modified in-place).
+        lora_pairs: List of dicts. Accepted formats:
+            - {"high": "file.safetensors", "high_weight": 1.0}  (RunPod client format)
+            - {"name": "file.safetensors", "strength": 1.0}     (simple format)
+    """
+    last_model_node = "92:1"
+    last_model_output = 0
+
+    for i, lora_pair in enumerate(lora_pairs):
+        node_id = f"custom_lora_{i}"
+        lora_name = lora_pair.get("high", lora_pair.get("name", ""))
+        strength = float(lora_pair.get("high_weight", lora_pair.get("strength", 1.0)))
+
+        if not lora_name:
+            logger.warning(f"Skipping LoRA pair {i}: no filename provided")
+            continue
+
+        workflow[node_id] = {
+            "inputs": {
+                "lora_name": lora_name,
+                "strength_model": strength,
+                "model": [last_model_node, last_model_output]
+            },
+            "class_type": "LoraLoaderModelOnly",
+            "_meta": {"title": f"Custom LoRA {i}: {lora_name}"}
+        }
+
+        last_model_node = node_id
+        last_model_output = 0
+        logger.info(f"Injected LoRA node '{node_id}': {lora_name} (strength={strength})")
+
+    # Repoint model consumers to the last LoRA in the chain instead of 92:1
+    if last_model_node != "92:1":
+        # First stage CFGGuider
+        if "92:47" in workflow:
+            workflow["92:47"]["inputs"]["model"] = [last_model_node, 0]
+            logger.info(f"Repointed 92:47 (CFGGuider stage 1) model -> {last_model_node}")
+        # Distilled LoRA loader (feeds into second stage CFGGuider 92:82)
+        if "92:68" in workflow:
+            workflow["92:68"]["inputs"]["model"] = [last_model_node, 0]
+            logger.info(f"Repointed 92:68 (distilled LoRA) model -> {last_model_node}")
+
+
 def handler(job):
     job_input = job.get("input", {})
 
@@ -352,6 +404,12 @@ def handler(job):
             prompt["92:102"]["inputs"]["value"] = frame_rate
         if "92:99" in prompt and prompt["92:99"]["class_type"] == "PrimitiveInt":
             prompt["92:99"]["inputs"]["value"] = int(frame_rate)
+
+    # LoRA injection — dynamically add LoRA loader nodes to the workflow
+    lora_pairs = job_input.get("lora_pairs", [])
+    if lora_pairs:
+        logger.info(f"Injecting {len(lora_pairs)} custom LoRA(s) into workflow")
+        inject_loras(prompt, lora_pairs)
 
     # Filename Prefix 설정 (75 - SaveVideo)
     if "75" in prompt:
