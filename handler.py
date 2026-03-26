@@ -427,6 +427,10 @@ def handler(job):
         # Rewire AudioVAEDecode (92:96) to read from stage 1 separator (92:80) instead of stage 2 separator (92:94)
         if "92:96" in prompt:
             prompt["92:96"]["inputs"]["samples"] = ["92:80", 1]
+        # Run stage 1 at full resolution (normally 0.5x because stage 2 upscales 2x)
+        if "92:90" in prompt:
+            prompt["92:90"]["inputs"]["scale_by"] = 1.0
+            logger.info("Set stage 1 resolution scale to 1.0x (full resolution)")
         # Stage 2 nodes (92:84, 92:108, 92:83, 92:70, 92:94, 92:82, 92:68, 92:66, 92:67, 92:73, 92:76, 92:81)
         # become orphaned and won't be executed by ComfyUI
 
