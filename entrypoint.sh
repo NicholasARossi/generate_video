@@ -3,45 +3,8 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Enable fast HuggingFace downloads
-export HF_HUB_ENABLE_HF_TRANSFER=1
-
-# Download models if not already present (first startup only)
-echo "Checking for model files..."
-
-download_if_missing() {
-    local url="$1"
-    local dest="$2"
-    if [ ! -f "$dest" ]; then
-        echo "Downloading $(basename $dest)..."
-        wget -q --show-progress "$url" -O "$dest"
-        echo "Done: $(basename $dest)"
-    else
-        echo "Found: $(basename $dest)"
-    fi
-}
-
-download_if_missing \
-    "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-dev-fp8.safetensors" \
-    "/ComfyUI/models/checkpoints/ltx-2-19b-dev-fp8.safetensors"
-
-download_if_missing \
-    "https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors" \
-    "/ComfyUI/models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors"
-
-download_if_missing \
-    "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors" \
-    "/ComfyUI/models/loras/ltx-2-19b-distilled-lora-384.safetensors"
-
-download_if_missing \
-    "https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Left/resolve/main/ltx-2-19b-lora-camera-control-dolly-left.safetensors" \
-    "/ComfyUI/models/loras/ltx-2-19b-lora-camera-control-dolly-left.safetensors"
-
-download_if_missing \
-    "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-spatial-upscaler-x2-1.0.safetensors" \
-    "/ComfyUI/models/latent_upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors"
-
-echo "All models ready."
+# Models are baked into the Docker image — no downloads needed.
+echo "All models ready (baked into image)."
 
 # Start ComfyUI in the background
 echo "Starting ComfyUI in the background..."
