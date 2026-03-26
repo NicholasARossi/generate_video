@@ -15,6 +15,12 @@ RUN cd /ComfyUI/custom_nodes && \
     cd ComfyUI-Manager && \
     pip install -r requirements.txt
 
+# Install LTX-Video custom nodes (LTXVImgToVideoInplace, LTXAVTextEncoderLoader, etc.)
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/Lightricks/ComfyUI-LTXVideo.git && \
+    cd ComfyUI-LTXVideo && \
+    pip install -r requirements.txt
+
 # Create model directories
 RUN mkdir -p /ComfyUI/models/checkpoints \
              /ComfyUI/models/text_encoders \

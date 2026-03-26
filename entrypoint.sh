@@ -9,7 +9,7 @@ echo "All models ready (baked into image)."
 # Start ComfyUI in the background
 # COMFY_EXTRA_FLAGS can be set via RunPod template env vars to add flags like
 # --use-sage-attention, --force-fp32, --bf16-unet, etc.
-COMFY_FLAGS="--listen --force-fp16 ${COMFY_EXTRA_FLAGS:-}"
+COMFY_FLAGS="--listen --use-sage-attention ${COMFY_EXTRA_FLAGS:-}"
 echo "Starting ComfyUI with flags: $COMFY_FLAGS"
 python /ComfyUI/main.py $COMFY_FLAGS &
 
