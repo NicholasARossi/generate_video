@@ -12,41 +12,31 @@ echo "Checking for model files..."
 download_if_missing() {
     local url="$1"
     local dest="$2"
-    local headers="${3:-}"
     if [ ! -f "$dest" ]; then
         echo "Downloading $(basename $dest)..."
-        if [ -n "$headers" ]; then
-            wget -q --show-progress --header="$headers" "$url" -O "$dest"
-        else
-            wget -q --show-progress "$url" -O "$dest"
-        fi
+        wget -q --show-progress "$url" -O "$dest"
         echo "Done: $(basename $dest)"
     else
         echo "Found: $(basename $dest)"
     fi
 }
 
-# -- Eros checkpoint (CivitAI, requires API key) --
-CIVIT_HEADER=""
-if [ -n "$CIVIT" ]; then
-    CIVIT_HEADER="Authorization: Bearer $CIVIT"
-fi
 download_if_missing \
-    "https://civitai.com/api/download/models/2752410" \
-    "/ComfyUI/models/checkpoints/ltx2310eros_beta.safetensors" \
-    "$CIVIT_HEADER"
+    "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-dev-fp8.safetensors" \
+    "/ComfyUI/models/checkpoints/ltx-2-19b-dev-fp8.safetensors"
 
-# -- Heretic text encoder (HuggingFace) --
 download_if_missing \
-    "https://huggingface.co/DreamFast/gemma-3-12b-it-heretic/resolve/main/comfyui/gemma_3_12B_it_heretic_fp8_e4m3fn.safetensors" \
-    "/ComfyUI/models/text_encoders/gemma_3_12B_it_heretic_fp8_e4m3fn.safetensors"
+    "https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors" \
+    "/ComfyUI/models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors"
 
-# -- Dynamic distilled LoRA (HuggingFace) --
 download_if_missing \
-    "https://huggingface.co/Kijai/LTX2.3_comfy/resolve/main/loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors" \
-    "/ComfyUI/models/loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors"
+    "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors" \
+    "/ComfyUI/models/loras/ltx-2-19b-distilled-lora-384.safetensors"
 
-# -- Spatial upscaler (HuggingFace) --
+download_if_missing \
+    "https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Left/resolve/main/ltx-2-19b-lora-camera-control-dolly-left.safetensors" \
+    "/ComfyUI/models/loras/ltx-2-19b-lora-camera-control-dolly-left.safetensors"
+
 download_if_missing \
     "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-spatial-upscaler-x2-1.0.safetensors" \
     "/ComfyUI/models/latent_upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors"
@@ -57,9 +47,9 @@ echo "All models ready."
 echo "Starting ComfyUI in the background..."
 python /ComfyUI/main.py --listen --use-sage-attention &
 
-# Wait for ComfyUI to be ready (longer timeout for first start with large models)
+# Wait for ComfyUI to be ready
 echo "Waiting for ComfyUI to be ready..."
-max_wait=600
+max_wait=300
 wait_count=0
 while [ $wait_count -lt $max_wait ]; do
     if curl -s http://127.0.0.1:8188/ > /dev/null 2>&1; then
