@@ -229,7 +229,7 @@ def load_workflow(workflow_path):
         return json.load(file)
 
 
-def inject_loras(workflow, lora_pairs):
+def inject_loras(workflow, lora_pairs, lora_stage="both"):
     """Inject custom LoRA loader nodes into the ComfyUI workflow.
 
     Chains LoraLoaderModelOnly nodes between the checkpoint (92:1) and the
@@ -241,6 +241,10 @@ def inject_loras(workflow, lora_pairs):
         lora_pairs: List of dicts. Accepted formats:
             - {"high": "file.safetensors", "high_weight": 1.0}  (RunPod client format)
             - {"name": "file.safetensors", "strength": 1.0}     (simple format)
+        lora_stage: Which stage(s) to apply LoRAs to.
+            - "both": Apply to stage 1 (92:47) and stage 2 (92:68). Default.
+            - "stage2": Apply only to stage 2 (92:68 distilled LoRA chain).
+            - "stage1": Apply only to stage 1 (92:47 CFGGuider).
     """
     last_model_node = "92:1"
     last_model_output = 0
@@ -271,13 +275,14 @@ def inject_loras(workflow, lora_pairs):
     # Repoint model consumers to the last LoRA in the chain instead of 92:1
     if last_model_node != "92:1":
         # First stage CFGGuider
-        if "92:47" in workflow:
+        if lora_stage in ("both", "stage1") and "92:47" in workflow:
             workflow["92:47"]["inputs"]["model"] = [last_model_node, 0]
             logger.info(f"Repointed 92:47 (CFGGuider stage 1) model -> {last_model_node}")
         # Distilled LoRA loader (feeds into second stage CFGGuider 92:82)
-        if "92:68" in workflow:
+        if lora_stage in ("both", "stage2") and "92:68" in workflow:
             workflow["92:68"]["inputs"]["model"] = [last_model_node, 0]
             logger.info(f"Repointed 92:68 (distilled LoRA) model -> {last_model_node}")
+        logger.info(f"LoRA stage mode: {lora_stage}")
 
 
 def handler(job):
@@ -328,7 +333,9 @@ def handler(job):
     frame_rate = job_input.get("frame_rate", 25.0)  # I2V: 161:174/161:202, T2V: 92:102/92:99 기본값: 25
     positive_prompt = job_input["prompt"]
     negative_prompt = job_input.get("negative_prompt", "blurry, low quality, still frame, frames, watermark, overlay, titles, has blurbox, has subtitles")
-    
+    img_compression = job_input.get("img_compression", 33)  # LTXVPreprocess compression (1-100, lower = more compressed)
+    lora_stage = job_input.get("lora_stage", "both")  # "both", "stage1", or "stage2"
+
     # 해상도 16배수 보정
     adjusted_width = to_nearest_multiple_of_16(width)
     adjusted_height = to_nearest_multiple_of_16(height)
@@ -369,7 +376,12 @@ def handler(job):
         # CFG 설정 (92:47 - CFGGuider)
         if "92:47" in prompt:
             prompt["92:47"]["inputs"]["cfg"] = cfg
-        
+
+        # img_compression 설정 (92:99 - LTXVPreprocess)
+        if "92:99" in prompt:
+            prompt["92:99"]["inputs"]["img_compression"] = img_compression
+            logger.info(f"Set img_compression to {img_compression}")
+
         # Frame rate 설정 (92:51 - LTXVEmptyLatentAudio, 92:22 - LTXVConditioning, 92:97 - CreateVideo)
         if "92:51" in prompt:
             prompt["92:51"]["inputs"]["frame_rate"] = int(frame_rate)
@@ -409,7 +421,7 @@ def handler(job):
     lora_pairs = job_input.get("lora_pairs", [])
     if lora_pairs:
         logger.info(f"Injecting {len(lora_pairs)} custom LoRA(s) into workflow")
-        inject_loras(prompt, lora_pairs)
+        inject_loras(prompt, lora_pairs, lora_stage=lora_stage)
 
     # Filename Prefix 설정 (75 - SaveVideo)
     if "75" in prompt:
