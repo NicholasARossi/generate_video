@@ -335,6 +335,7 @@ def handler(job):
     negative_prompt = job_input.get("negative_prompt", "blurry, low quality, still frame, frames, watermark, overlay, titles, has blurbox, has subtitles")
     img_compression = job_input.get("img_compression", 33)  # LTXVPreprocess compression (1-100, lower = more compressed)
     lora_stage = job_input.get("lora_stage", "both")  # "both", "stage1", or "stage2"
+    skip_stage2 = job_input.get("skip_stage2", False)  # Skip stage 2 refinement/upscale
 
     # 해상도 16배수 보정
     adjusted_width = to_nearest_multiple_of_16(width)
@@ -416,6 +417,18 @@ def handler(job):
             prompt["92:102"]["inputs"]["value"] = frame_rate
         if "92:99" in prompt and prompt["92:99"]["class_type"] == "PrimitiveInt":
             prompt["92:99"]["inputs"]["value"] = int(frame_rate)
+
+    # Skip stage 2 — rewire VAE decode to read from stage 1 output directly
+    if skip_stage2 and has_image:
+        logger.info("Skipping stage 2 (refinement/upscale) — VAE decoding stage 1 output directly")
+        # Rewire VAEDecode (92:95) to read from stage 1 separator (92:80) instead of stage 2 separator (92:94)
+        if "92:95" in prompt:
+            prompt["92:95"]["inputs"]["samples"] = ["92:80", 0]
+        # Rewire AudioVAEDecode (92:96) to read from stage 1 separator (92:80) instead of stage 2 separator (92:94)
+        if "92:96" in prompt:
+            prompt["92:96"]["inputs"]["samples"] = ["92:80", 1]
+        # Stage 2 nodes (92:84, 92:108, 92:83, 92:70, 92:94, 92:82, 92:68, 92:66, 92:67, 92:73, 92:76, 92:81)
+        # become orphaned and won't be executed by ComfyUI
 
     # LoRA injection — dynamically add LoRA loader nodes to the workflow
     lora_pairs = job_input.get("lora_pairs", [])
