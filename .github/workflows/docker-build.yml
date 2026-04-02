@@ -41,7 +41,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=ltx-eros-v1
+            type=raw,value=ltx-eros-v2
             type=sha
 
       - name: Build and push
