@@ -337,6 +337,14 @@ def handler(job):
     lora_stage = job_input.get("lora_stage", "both")  # "both", "stage1", or "stage2"
     skip_stage2 = job_input.get("skip_stage2", False)  # Skip stage 2 refinement/upscale
 
+    # Stage 2 override params (only used when skip_stage2=False)
+    stage2_seed_match = job_input.get("stage2_seed_match", False)  # Copy stage 1 seed to stage 2
+    stage2_sampler = job_input.get("stage2_sampler", None)  # Override sampler: "euler", "gradient_estimation", etc.
+    stage2_cfg = job_input.get("stage2_cfg", None)  # Override stage 2 CFG (default: 1.0)
+    stage2_lora_strength = job_input.get("stage2_lora_strength", None)  # Override distilled LoRA strength (default: 0.6)
+    stage2_sigmas = job_input.get("stage2_sigmas", None)  # Override manual sigmas string
+    stage2_steps = job_input.get("stage2_steps", None)  # Replace ManualSigmas with LTXVScheduler (auto sigmas)
+
     # 해상도 16배수 보정
     adjusted_width = to_nearest_multiple_of_16(width)
     adjusted_height = to_nearest_multiple_of_16(height)
@@ -433,6 +441,55 @@ def handler(job):
             logger.info("Set stage 1 resolution scale to 1.0x (full resolution)")
         # Stage 2 nodes (92:84, 92:108, 92:83, 92:70, 92:94, 92:82, 92:68, 92:66, 92:67, 92:73, 92:76, 92:81)
         # become orphaned and won't be executed by ComfyUI
+
+    # Stage 2 overrides — apply when stage 2 is NOT skipped
+    if not skip_stage2 and has_image:
+        # Fix: Match stage 1 seed in stage 2 (default is hardcoded 0)
+        if stage2_seed_match and "92:67" in prompt:
+            prompt["92:67"]["inputs"]["noise_seed"] = seed
+            logger.info(f"Stage 2 seed matched to stage 1: {seed}")
+
+        # Fix: Override stage 2 sampler (default: gradient_estimation)
+        if stage2_sampler and "92:66" in prompt:
+            prompt["92:66"]["inputs"]["sampler_name"] = stage2_sampler
+            logger.info(f"Stage 2 sampler set to: {stage2_sampler}")
+
+        # Fix: Override stage 2 CFG (default: 1.0)
+        if stage2_cfg is not None and "92:82" in prompt:
+            prompt["92:82"]["inputs"]["cfg"] = float(stage2_cfg)
+            logger.info(f"Stage 2 CFG set to: {stage2_cfg}")
+
+        # Fix: Override distilled LoRA strength (default: 0.6)
+        if stage2_lora_strength is not None and "92:68" in prompt:
+            prompt["92:68"]["inputs"]["strength_model"] = float(stage2_lora_strength)
+            logger.info(f"Stage 2 distilled LoRA strength set to: {stage2_lora_strength}")
+
+        # Fix: Override manual sigmas string
+        if stage2_sigmas and "92:73" in prompt:
+            prompt["92:73"]["inputs"]["sigmas"] = stage2_sigmas
+            logger.info(f"Stage 2 sigmas set to: {stage2_sigmas}")
+
+        # Fix: Replace ManualSigmas with LTXVScheduler for auto sigma scheduling
+        if stage2_steps and "92:73" in prompt:
+            # Remove the ManualSigmas node
+            del prompt["92:73"]
+            # Add an LTXVScheduler node for stage 2
+            prompt["stage2_scheduler"] = {
+                "inputs": {
+                    "steps": int(stage2_steps),
+                    "max_shift": 2.05,
+                    "base_shift": 0.95,
+                    "stretch": True,
+                    "terminal": 0.1,
+                    "latent": ["92:83", 0]
+                },
+                "class_type": "LTXVScheduler",
+                "_meta": {"title": "Stage 2 LTXV Scheduler"}
+            }
+            # Rewire stage 2 sampler to use the new scheduler
+            if "92:70" in prompt:
+                prompt["92:70"]["inputs"]["sigmas"] = ["stage2_scheduler", 0]
+            logger.info(f"Stage 2 using LTXVScheduler with {stage2_steps} steps (replaced ManualSigmas)")
 
     # LoRA injection — dynamically add LoRA loader nodes to the workflow
     lora_pairs = job_input.get("lora_pairs", [])
